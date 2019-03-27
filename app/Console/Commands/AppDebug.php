@@ -39,8 +39,6 @@ class AppDebug extends Command
     public function handle()
     {
         while (true) {
-            usleep(0.5 * 1000000);
-            echo date('Y-m-d H:i:s') . PHP_EOL;
         }
     }
 
@@ -143,5 +141,31 @@ class AppDebug extends Command
         echo PHP_EOL;
         fann_destroy_train($test_data);
         return true;
+    }
+
+    /**
+     * @param string $file
+     * @param array $inputArray
+     * @param array $outputArray
+     * @param array $networkInput
+     */
+    private function buildImageFrom($file, $inputArray, $outputArray, $networkInput)
+    {
+        /* build image from $inputArray */
+        $img = imagecreatetruecolor(64, 64);
+        foreach ($inputArray as $key => $pix) {
+            $x = $key % 64;
+            $y = intval($key / 64);
+            if ($y > 63) {
+                break;
+            }
+            $level = intval(($pix + 0.5) * 255);
+            $level = $level < 0 ? 0;
+            $level = $level > 255 ? 255;
+            $color = imagecolorallocate($img, $level, $level, $level);
+            imagesetpixel($img, $x, $y, $color);
+            imagecolordeallocate($img, $color);
+        }
+        imagefilledellipse();
     }
 }
