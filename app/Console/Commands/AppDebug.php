@@ -38,31 +38,110 @@ class AppDebug extends Command
      */
     public function handle()
     {
-        return $this->createTrainData();
-        $img1 = new Image();
-        var_dump($img1->loadFromJpeg('vendor/test.jpg', 200, 200));
-        $img1->saveAsPng('vendor/test1.png', 1000, 1000);
-        var_dump(memory_get_peak_usage() / 1024 / 1024);
-    }
-
-    private function createTrainData()
-    {
-        $img = imagecreatetruecolor(500, 500);
-        imageantialias($img, true);
-        $white = imagecolorallocate($img, 255, 255, 255);
-        imagefilledrectangle($img, 0, 0, 500-1, 500-1, $white);
-        for ($i = 0; $i < 100; $i++) {
-            $this->drawChar($img, range('A', 'Z')[mt_rand(0, 25)], mt_rand(0, 500-1-8), mt_rand(0, 500-1-10));
+        while (true) {
+            usleep(0.5 * 1000000);
+            echo date('Y-m-d H:i:s') . PHP_EOL;
         }
-        imagepng($img, 'test2.png');
-        imagedestroy($img);
     }
 
+    /**
+     * train and save a network
+     *
+     * @return void
+     */
+    private function createNetFile()
+    {
+        $train_data = $this->createTrainData(100);
+        $network = fann_create_standard(4, 64 * 64, 700, 500, 2);
+        fann_set_activation_function_hidden($network, FANN_SIGMOID_SYMMETRIC);
+        fann_set_activation_function_output($network, FANN_SIGMOID);
+        fann_set_training_algorithm($network, FANN_TRAIN_RPROP);
+        fann_set_train_error_function($network, FANN_ERRORFUNC_LINEAR);
+        fann_set_train_stop_function($network, FANN_STOPFUNC_MSE);
+        fann_set_callback($network, [$this, 'fannTrainCallback']);
+        fann_train_on_data($network, $train_data, 1000, 2, 0);
+        fann_save($network, 'vendor/network.dat');
+    }
+
+    /**
+     * create a train dataset
+     *
+     * @param int $number data pair number
+     * @return resource a fann dataset resource(FANN Train Data)
+     */
+    private function createTrainData($number)
+    {
+        return fann_create_train_from_callback($number, 64 * 64, 2, [$this, 'createOneData']);
+    }
+
+    /**
+     * create a array with keys input and output.
+     * size of input is 64x64, size of output is 2
+     *
+     * params just for callback.
+     *
+     * @param int $num
+     * @param int $num_input
+     * @param int $num_output
+     * @return array
+     */
+    private function createOneData($num, $num_input, $num_output)
+    {
+        $img = imagecreatetruecolor(64, 64);
+        $background = imagecolorallocate($img, 255, 255, 255);
+        imagefilledrectangle($img, 0, 0, 63, 63, $background);
+        imagecolordeallocate($img, $background);
+        $x = mt_rand(0, 63 - 8);
+        $y = mt_rand(0, 63 - 10);
+        $this->drawChar($img, range('A', 'Z')[mt_rand(0, 25)], $x, $y);
+        $result = ['input' => [], 'output' => [($x + 4) / 64 - 0.5, ($y + 5) / 64 - 0.5]];
+        for ($j = 0; $j < 64; $j++) {
+            for ($i = 0; $i < 64; $i++) {
+                $colorIndex = imagecolorat($img, $i, $j);
+                $rgba = imagecolorsforindex($img, $colorIndex);
+                $result['input'][] = ($rgba['red'] + $rgba['green'] + $rgba['blue']) / 3 / 255 - 0.5;
+            }
+        }
+        imagedestroy($img);
+        return $result;
+    }
+
+    /**
+     * print a char on gd image
+     *
+     * @param resource $img
+     * @param string $ch
+     * @param int $x
+     * @param int $y
+     * @param int $r red color, default 0
+     * @param int $g green color, default 0
+     * @param int $b blue color, default 0
+     * @return bool success return true, fail return false
+     */
     private function drawChar($img, $ch, $x, $y, $r = 0, $g = 0, $b = 0)
     {
         $color = imagecolorallocate($img, $r, $g, $b);
         /* width:8 height:10 */
-        imagechar($img, 5, $x, $y - 3, $ch, $color);
+        $result = imagechar($img, 5, $x, $y - 3, $ch, $color);
         imagecolordeallocate($img, $color);
+        return $result;
+    }
+
+    /**
+     * just for fann train callback
+     *
+     * @return bool always return true
+     */
+    private function fannTrainCallback($ann, $train, $max_epochs, $epochs_between_reports, $desired_error, $epochs)
+    {
+        $test_data = $this->createTrainData(10);
+        echo round($epochs / $max_epochs * 100);
+        echo '% ';
+        echo fann_get_MSE($ann);
+        echo ' ';
+        echo fann_test_data($ann, $test_data);
+        echo PHP_EOL;
+        fann_destroy_train($test_data);
+        return true;
     }
 }
