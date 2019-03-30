@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Image\Image;
+use App\Image\Helper;
 use Illuminate\Console\Command;
 
 class AppDebug extends Command
@@ -38,8 +38,10 @@ class AppDebug extends Command
      */
     public function handle()
     {
-        while (true) {
-        }
+        $arr = Helper::arrayFromImage('a.png', 80, 60, false);
+        echo date('Y-m-d H:i:s') . PHP_EOL;
+        Helper::arrayToImage($arr, 'b.png', 80, 60, false);
+        Helper::intelligenceArrayToImage($arr, 'c.png', 80, 60, false);
     }
 
     /**
@@ -160,8 +162,8 @@ class AppDebug extends Command
                 break;
             }
             $level = intval(($pix + 0.5) * 255);
-            $level = $level < 0 ? 0;
-            $level = $level > 255 ? 255;
+            $level = $level < 0 ? 0 : $level;
+            $level = $level > 255 ? 255 : $level;
             $color = imagecolorallocate($img, $level, $level, $level);
             imagesetpixel($img, $x, $y, $color);
             imagecolordeallocate($img, $color);
