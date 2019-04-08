@@ -19,7 +19,10 @@ class AppDebug extends Command
      *
      * @var string
      */
-    protected $description = 'Command description';
+    protected $description = '';
+
+    private $curl = null;
+    private $curlError = '';
 
     /**
      * Create a new command instance.
@@ -38,136 +41,98 @@ class AppDebug extends Command
      */
     public function handle()
     {
-        $arr = Helper::arrayFromImage('a.png', 80, 60, false);
-        echo date('Y-m-d H:i:s') . PHP_EOL;
-        Helper::arrayToImage($arr, 'b.png', 80, 60, false);
-        Helper::intelligenceArrayToImage($arr, 'c.png', 80, 60, false);
+        try {
+            $d = $this->getAll($this->curlGet('http://tieba.baidu.com/f/index/forumclass'));
+            foreach ($d as $k) {
+                for ($i = 1; true; $i++) {
+                    $f = $this->curlGet('http://tieba.baidu.com/f/index/forumpark?cn='.urlencode($k[1]).'&ci=0&pcn='.urlencode($k[0]).'&pci=0&ct=1&st=new&pn='.$i);
+                    $f = $this->tiebaList($f);
+                    if (empty($f)) {
+                        break;
+                    }
+                    foreach ($f as $g) {
+                        echo $g[1] . PHP_EOL;
+                        $time = date('Y-m-d H:i:s');
+                        file_put_contents('public/storage/tieba-data.csv', "\"$time\",\"{$k[0]}\",\"{$k[1]}\",\"{$g[0]}\",\"{$g[1]}\"" . PHP_EOL, FILE_APPEND);
+                    }
+                }
+                
+            }
+        } catch (\Exception $e) {
+            echo $e->getMessage();
+        }
     }
 
-    /**
-     * train and save a network
-     *
-     * @return void
-     */
-    private function createNetFile()
+    public function tiebaList($str)
     {
-        $train_data = $this->createTrainData(100);
-        $network = fann_create_standard(4, 64 * 64, 700, 500, 2);
-        fann_set_activation_function_hidden($network, FANN_SIGMOID_SYMMETRIC);
-        fann_set_activation_function_output($network, FANN_SIGMOID);
-        fann_set_training_algorithm($network, FANN_TRAIN_RPROP);
-        fann_set_train_error_function($network, FANN_ERRORFUNC_LINEAR);
-        fann_set_train_stop_function($network, FANN_STOPFUNC_MSE);
-        fann_set_callback($network, [$this, 'fannTrainCallback']);
-        fann_train_on_data($network, $train_data, 1000, 2, 0);
-        fann_save($network, 'vendor/network.dat');
-    }
-
-    /**
-     * create a train dataset
-     *
-     * @param int $number data pair number
-     * @return resource a fann dataset resource(FANN Train Data)
-     */
-    private function createTrainData($number)
-    {
-        return fann_create_train_from_callback($number, 64 * 64, 2, [$this, 'createOneData']);
-    }
-
-    /**
-     * create a array with keys input and output.
-     * size of input is 64x64, size of output is 2
-     *
-     * params just for callback.
-     *
-     * @param int $num
-     * @param int $num_input
-     * @param int $num_output
-     * @return array
-     */
-    private function createOneData($num, $num_input, $num_output)
-    {
-        $img = imagecreatetruecolor(64, 64);
-        $background = imagecolorallocate($img, 255, 255, 255);
-        imagefilledrectangle($img, 0, 0, 63, 63, $background);
-        imagecolordeallocate($img, $background);
-        $x = mt_rand(0, 63 - 8);
-        $y = mt_rand(0, 63 - 10);
-        $this->drawChar($img, range('A', 'Z')[mt_rand(0, 25)], $x, $y);
-        $result = ['input' => [], 'output' => [($x + 4) / 64 - 0.5, ($y + 5) / 64 - 0.5]];
-        for ($j = 0; $j < 64; $j++) {
-            for ($i = 0; $i < 64; $i++) {
-                $colorIndex = imagecolorat($img, $i, $j);
-                $rgba = imagecolorsforindex($img, $colorIndex);
-                $result['input'][] = ($rgba['red'] + $rgba['green'] + $rgba['blue']) / 3 / 255 - 0.5;
+        $results = [];
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML($str);
+        $list = $dom->getElementsByTagName('a');
+        for ($i = 0; $i < $list->length; $i++) {
+            if (is_null($list->item($i)->attributes)) {
+                continue;
+            }
+            $result = [];
+            parse_str(parse_url($list->item($i)->attributes->getNamedItem('href')->nodeValue, PHP_URL_QUERY), $result);
+            if (isset($result['kw'])) {
+                if (isset($results[urlencode($result['kw'])])) {
+                    continue;
+                }
+                $results[urlencode($result['kw'])] = [$result['kw'], 'http://tieba.baidu.com/f?kw='.urlencode($result['kw'])];
             }
         }
-        imagedestroy($img);
-        return $result;
+        return array_values($results);
     }
 
-    /**
-     * print a char on gd image
-     *
-     * @param resource $img
-     * @param string $ch
-     * @param int $x
-     * @param int $y
-     * @param int $r red color, default 0
-     * @param int $g green color, default 0
-     * @param int $b blue color, default 0
-     * @return bool success return true, fail return false
-     */
-    private function drawChar($img, $ch, $x, $y, $r = 0, $g = 0, $b = 0)
+    public function getAll($str)
     {
-        $color = imagecolorallocate($img, $r, $g, $b);
-        /* width:8 height:10 */
-        $result = imagechar($img, 5, $x, $y - 3, $ch, $color);
-        imagecolordeallocate($img, $color);
-        return $result;
-    }
-
-    /**
-     * just for fann train callback
-     *
-     * @return bool always return true
-     */
-    private function fannTrainCallback($ann, $train, $max_epochs, $epochs_between_reports, $desired_error, $epochs)
-    {
-        $test_data = $this->createTrainData(10);
-        echo round($epochs / $max_epochs * 100);
-        echo '% ';
-        echo fann_get_MSE($ann);
-        echo ' ';
-        echo fann_test_data($ann, $test_data);
-        echo PHP_EOL;
-        fann_destroy_train($test_data);
-        return true;
-    }
-
-    /**
-     * @param string $file
-     * @param array $inputArray
-     * @param array $outputArray
-     * @param array $networkInput
-     */
-    private function buildImageFrom($file, $inputArray, $outputArray, $networkInput)
-    {
-        /* build image from $inputArray */
-        $img = imagecreatetruecolor(64, 64);
-        foreach ($inputArray as $key => $pix) {
-            $x = $key % 64;
-            $y = intval($key / 64);
-            if ($y > 63) {
-                break;
+        $results = [];
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML($str);
+        $list = $dom->getElementsByTagName('a');
+        for ($i = 0; $i < $list->length; $i++) {
+            if (is_null($list->item($i)->attributes)) {
+                continue;
             }
-            $level = intval(($pix + 0.5) * 255);
-            $level = $level < 0 ? 0 : $level;
-            $level = $level > 255 ? 255 : $level;
-            $color = imagecolorallocate($img, $level, $level, $level);
-            imagesetpixel($img, $x, $y, $color);
-            imagecolordeallocate($img, $color);
+            $result = [];
+            parse_str(parse_url($list->item($i)->attributes->getNamedItem('href')->nodeValue, PHP_URL_QUERY), $result);
+            if (isset($result['cn'])) {
+                $results[] = [$result['pcn'], $result['cn'], 'http://tieba.baidu.com/f/index/forumpark?cn='.urlencode($result['cn']).'&ci=0&pcn='.urlencode($result['pcn']).'&pci=0&ct=1'];
+            }
         }
-        imagefilledellipse();
+        return $results;
+    }
+
+    public function curlGet($url)
+    {
+        if (is_null($this->curl)) {
+            $h = curl_init();
+            curl_setopt($h, CURLOPT_AUTOREFERER, true);
+            curl_setopt($h, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($h, CURLOPT_FORBID_REUSE, false);
+            curl_setopt($h, CURLOPT_FRESH_CONNECT, false);
+            curl_setopt($h, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($h, CURLOPT_CONNECTTIMEOUT, 60);
+            curl_setopt($h, CURLOPT_DNS_CACHE_TIMEOUT, 60 * 5);
+            curl_setopt($h, CURLOPT_MAXCONNECTS, 10);
+            curl_setopt($h, CURLOPT_MAXREDIRS, 20);
+            curl_setopt($h, CURLOPT_TIMEOUT, 60 * 2);
+            curl_setopt($h, CURLOPT_REFERER, 'http://tieba.baidu.com');
+            curl_setopt($h, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36');
+            curl_setopt($h, CURLOPT_HTTPHEADER, ['Content-type: text/html; charset=UTF-8']);
+            //curl_setopt($h, CURLOPT_COOKIE, 'TIEBA_USERTYPE=902f5df6fcb32456243f4253; bdshare_firstime=1540112903703; BDUSS=jB5N1dtZ3BQSnh4S2R6NWtHSGY3OWdRUTkyRVJMdkFzb0k3cEFzbmRKdGtWWWRjQVFBQUFBJCQAAAAAAAAAAAEAAAC0xQE6d1ptWjJxWWxSc2RYMFIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGTIX1xkyF9ca; TIEBAUID=35f770fc23495e2a322108f1; PSTM=1552206572; BAIDUID=11BCED6C3A2D242E1BD506EB5FE65F9F:FG=1; BIDUPSID=7E9B130D420E8212A57167E47E22DB83; pgv_pvi=2835934208; STOKEN=fc7e8b2ad63188fd11244e7ea15cab90176230054e2e0022b05499a63a56db4e; Hm_lvt_98b9d8c2fd6608d564bf2ac2ae642948=1552737320,1552828878,1554615565,1554729915; Hm_lpvt_98b9d8c2fd6608d564bf2ac2ae642948=1554740546');
+            $this->curl = $h;
+        } else {
+            $h = $this->curl;
+        }
+        curl_setopt($h, CURLOPT_URL, $url);
+        $data = curl_exec($h);
+        if (false === $data) {
+            $this->curlError = curl_error($h);
+        }
+        return $data;
     }
 }
