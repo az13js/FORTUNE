@@ -41,6 +41,46 @@ class AppDebug extends Command
      */
     public function handle()
     {
+    }
+
+    public function querySql($sql)
+    {
+        $sqlCreate = 'CREATE TABLE IF NOT EXISTS `tblist`(`time` INT(11) NOT NULL DEFAULT 0,`pcn` VARCHAR(255) NOT NULL DEFAULT "", `cn` VARCHAR(255) NOT NULL DEFAULT "", `name` VARCHAR(255) NOT NULL DEFAULT "", `url` VARCHAR(1024) NOT NULL DEFAULT "")';
+        $db = new \SQLite3('public/storage/tb.dat');
+        $db->exec($sqlCreate);
+        try {
+            $result = $db->query($sql);
+        } catch (\Exception $e) {
+            $result = false;
+        }
+        if (!$result) {
+            $db->close();
+            return false;
+        }
+        $data = [];
+        while ($v = $result->fetchArray(SQLITE3_ASSOC)) {
+            $data[] = $v;
+        }
+        $db->close();
+        return $data;
+    }
+
+    public function runSql($sql)
+    {
+        $sqlCreate = 'CREATE TABLE IF NOT EXISTS `tblist`(`time` INT(11) NOT NULL DEFAULT 0,`pcn` VARCHAR(255) NOT NULL DEFAULT "", `cn` VARCHAR(255) NOT NULL DEFAULT "", `name` VARCHAR(255) NOT NULL DEFAULT "", `url` VARCHAR(1024) NOT NULL DEFAULT "")';
+        $db = new \SQLite3('public/storage/tb.dat');
+        $db->exec($sqlCreate);
+        try {
+            $result = $db->exec($sql);
+        } catch (\Exception $e) {
+            $result = false;
+        }
+        $db->close();
+        return $result;
+    }
+
+    public function loop()
+    {
         try {
             $d = $this->getAll($this->curlGet('http://tieba.baidu.com/f/index/forumclass'));
             foreach ($d as $k) {
@@ -56,7 +96,7 @@ class AppDebug extends Command
                         file_put_contents('public/storage/tieba-data.csv', "\"$time\",\"{$k[0]}\",\"{$k[1]}\",\"{$g[0]}\",\"{$g[1]}\"" . PHP_EOL, FILE_APPEND);
                     }
                 }
-                
+
             }
         } catch (\Exception $e) {
             echo $e->getMessage();
