@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Image\Helper;
 use Illuminate\Console\Command;
 
 class AppDebug extends Command
@@ -41,6 +40,13 @@ class AppDebug extends Command
      */
     public function handle()
     {
+        if (!is_dir('public')) {
+            mkdir('public');
+        }
+        if (!is_dir('public/storage')) {
+            mkdir('public/storage');
+        }
+        $this->loop();
     }
 
     public function querySql($sql)
@@ -90,10 +96,20 @@ class AppDebug extends Command
                     if (empty($f)) {
                         break;
                     }
+                    $updateNumber = 0;
                     foreach ($f as $g) {
+                        $result = $this->querySql('SELECT * FROM `tblist` WHERE `url`="'.$g[1].'" LIMIT 1');
+                        if (!empty($result)) {
+                            continue;
+                        }
+                        $updateNumber++;
+                        $this->runSql('INSERT INTO `tblist`(`time`,`pcn`,`cn`,`name`,`url`) VALUES('.time().',"'.$k[0].'","'.$k[1].'","'.$g[0].'","'.$g[1].'")');
                         echo $g[1] . PHP_EOL;
                         $time = date('Y-m-d H:i:s');
                         file_put_contents('public/storage/tieba-data.csv', "\"$time\",\"{$k[0]}\",\"{$k[1]}\",\"{$g[0]}\",\"{$g[1]}\"" . PHP_EOL, FILE_APPEND);
+                    }
+                    if ($updateNumber == 0) {
+                        break;
                     }
                 }
 
@@ -163,7 +179,6 @@ class AppDebug extends Command
             curl_setopt($h, CURLOPT_REFERER, 'http://tieba.baidu.com');
             curl_setopt($h, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36');
             curl_setopt($h, CURLOPT_HTTPHEADER, ['Content-type: text/html; charset=UTF-8']);
-            //curl_setopt($h, CURLOPT_COOKIE, 'TIEBA_USERTYPE=902f5df6fcb32456243f4253; bdshare_firstime=1540112903703; BDUSS=jB5N1dtZ3BQSnh4S2R6NWtHSGY3OWdRUTkyRVJMdkFzb0k3cEFzbmRKdGtWWWRjQVFBQUFBJCQAAAAAAAAAAAEAAAC0xQE6d1ptWjJxWWxSc2RYMFIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGTIX1xkyF9ca; TIEBAUID=35f770fc23495e2a322108f1; PSTM=1552206572; BAIDUID=11BCED6C3A2D242E1BD506EB5FE65F9F:FG=1; BIDUPSID=7E9B130D420E8212A57167E47E22DB83; pgv_pvi=2835934208; STOKEN=fc7e8b2ad63188fd11244e7ea15cab90176230054e2e0022b05499a63a56db4e; Hm_lvt_98b9d8c2fd6608d564bf2ac2ae642948=1552737320,1552828878,1554615565,1554729915; Hm_lpvt_98b9d8c2fd6608d564bf2ac2ae642948=1554740546');
             $this->curl = $h;
         } else {
             $h = $this->curl;
