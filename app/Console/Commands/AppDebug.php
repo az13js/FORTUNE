@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AppDebug extends Command
 {
@@ -40,126 +42,91 @@ class AppDebug extends Command
      */
     public function handle()
     {
+        while (true) {
+            $this->flushOnce();
+        }
+    }
+
+    public function flushOnce()
+    {
+        for ($page = 1; $page < 100; $page++) {
+            $newArtital = 0;
+            $data = $this->getList($page);
+            if (false == $data) {
+                break;
+            }
+            foreach ($data['docs'] as $unit) {
+                $first = DB::table('news')->where('news_key', $unit['id'])->first();
+                if (is_null($first)) {
+                    $contextFile = $this->getText($unit['url']);
+                    if (!empty($this->curlError)) {
+                        Log::error('[CURL]' . $this->curlError);
+                        $this->curlError = '';
+                        continue;
+                    }
+                    $result = DB::transaction(function () use ($unit, $contextFile) {
+                        $id = DB::table('news')->insertGetId([
+                            'news_key' => $unit['id'],
+                            'title' => $unit['title'],
+                            'url' => $unit['url'],
+                            'public' => $unit['pubtime'],
+                            'created_at' => date('Y-m-d H:i:s'),
+                            'updated_at' => date('Y-m-d H:i:s'),
+                        ]);
+                        return DB::table('context')->insert([
+                            'news_id' => $id,
+                            'context' => $contextFile,
+                            'created_at' => date('Y-m-d H:i:s'),
+                            'updated_at' => date('Y-m-d H:i:s'),
+                        ]);
+                    });
+                    if (false == $result) {
+                        Log::error('[SQL]transaction fail');
+                    } else {
+                        $newArtital++;
+                    }
+                }
+            }
+            if ($newArtital == 0) {
+                Log::info('NO UPDATE, PAGE: '.$page.'.');
+            } else {
+                Log::info('UPDATE: ' . $newArtital . ', PAGE: ' . $page);
+            }
+        }
+    }
+
+    public function getText($url)
+    {
+        $context = $this->curlGet($url);
+        if (empty($context)) {
+            return '';
+        }
+        $fileName = hash('sha256', $context);
         if (!is_dir('public')) {
             mkdir('public');
         }
         if (!is_dir('public/storage')) {
             mkdir('public/storage');
         }
-        $this->loop();
+        file_put_contents('public/storage/' . $fileName . '.html', $context);
+        return $fileName;
     }
 
-    public function querySql($sql)
+    public function getList(int $pager = 1, int $pagenum = 8)
     {
-        $sqlCreate = 'CREATE TABLE IF NOT EXISTS `tblist`(`time` INT(11) NOT NULL DEFAULT 0,`pcn` VARCHAR(255) NOT NULL DEFAULT "", `cn` VARCHAR(255) NOT NULL DEFAULT "", `name` VARCHAR(255) NOT NULL DEFAULT "", `url` VARCHAR(1024) NOT NULL DEFAULT "")';
-        $db = new \SQLite3('public/storage/tb.dat');
-        $db->exec($sqlCreate);
-        try {
-            $result = $db->query($sql);
-        } catch (\Exception $e) {
-            $result = false;
-        }
-        if (!$result) {
-            $db->close();
-            return false;
-        }
-        $data = [];
-        while ($v = $result->fetchArray(SQLITE3_ASSOC)) {
-            $data[] = $v;
-        }
-        $db->close();
-        return $data;
-    }
-
-    public function runSql($sql)
-    {
-        $sqlCreate = 'CREATE TABLE IF NOT EXISTS `tblist`(`time` INT(11) NOT NULL DEFAULT 0,`pcn` VARCHAR(255) NOT NULL DEFAULT "", `cn` VARCHAR(255) NOT NULL DEFAULT "", `name` VARCHAR(255) NOT NULL DEFAULT "", `url` VARCHAR(1024) NOT NULL DEFAULT "")';
-        $db = new \SQLite3('public/storage/tb.dat');
-        $db->exec($sqlCreate);
-        try {
-            $result = $db->exec($sql);
-        } catch (\Exception $e) {
-            $result = false;
-        }
-        $db->close();
-        return $result;
-    }
-
-    public function loop()
-    {
-        try {
-            $d = $this->getAll($this->curlGet('http://tieba.baidu.com/f/index/forumclass'));
-            foreach ($d as $k) {
-                for ($i = 1; true; $i++) {
-                    $f = $this->curlGet('http://tieba.baidu.com/f/index/forumpark?cn='.urlencode($k[1]).'&ci=0&pcn='.urlencode($k[0]).'&pci=0&ct=1&st=new&pn='.$i);
-                    $f = $this->tiebaList($f);
-                    if (empty($f)) {
-                        break;
-                    }
-                    $updateNumber = 0;
-                    foreach ($f as $g) {
-                        $result = $this->querySql('SELECT * FROM `tblist` WHERE `url`="'.$g[1].'" LIMIT 1');
-                        if (!empty($result)) {
-                            continue;
-                        }
-                        $updateNumber++;
-                        $this->runSql('INSERT INTO `tblist`(`time`,`pcn`,`cn`,`name`,`url`) VALUES('.time().',"'.$k[0].'","'.$k[1].'","'.$g[0].'","'.$g[1].'")');
-                        echo $g[1] . PHP_EOL;
-                        $time = date('Y-m-d H:i:s');
-                        file_put_contents('public/storage/tieba-data.csv', "\"$time\",\"{$k[0]}\",\"{$k[1]}\",\"{$g[0]}\",\"{$g[1]}\"" . PHP_EOL, FILE_APPEND);
-                    }
-                    if ($updateNumber == 0) {
-                        break;
-                    }
-                }
-
+        $result = $this->curlGet("http://channel.chinanews.com/cns/cjs/fortune.shtml?pager=$pager&pagenum=$pagenum&_=" . (1000 * time()));
+        if (empty($this->curlError)) {
+            $result = ltrim($result, 'specialcnsdata = ');
+            $result = mb_substr($result, 0, 1 + mb_strrpos($result, '}'));
+            $data = json_decode($result, true);
+            if (is_null($data)) {
+                Log::error('[JSON_DECODE]' . serialize($result));
             }
-        } catch (\Exception $e) {
-            echo $e->getMessage();
+            return $data;
         }
-    }
-
-    public function tiebaList($str)
-    {
-        $results = [];
-        $dom = new \DOMDocument();
-        libxml_use_internal_errors(true);
-        $dom->loadHTML($str);
-        $list = $dom->getElementsByTagName('a');
-        for ($i = 0; $i < $list->length; $i++) {
-            if (is_null($list->item($i)->attributes)) {
-                continue;
-            }
-            $result = [];
-            parse_str(parse_url($list->item($i)->attributes->getNamedItem('href')->nodeValue, PHP_URL_QUERY), $result);
-            if (isset($result['kw'])) {
-                if (isset($results[urlencode($result['kw'])])) {
-                    continue;
-                }
-                $results[urlencode($result['kw'])] = [$result['kw'], 'http://tieba.baidu.com/f?kw='.urlencode($result['kw'])];
-            }
-        }
-        return array_values($results);
-    }
-
-    public function getAll($str)
-    {
-        $results = [];
-        $dom = new \DOMDocument();
-        libxml_use_internal_errors(true);
-        $dom->loadHTML($str);
-        $list = $dom->getElementsByTagName('a');
-        for ($i = 0; $i < $list->length; $i++) {
-            if (is_null($list->item($i)->attributes)) {
-                continue;
-            }
-            $result = [];
-            parse_str(parse_url($list->item($i)->attributes->getNamedItem('href')->nodeValue, PHP_URL_QUERY), $result);
-            if (isset($result['cn'])) {
-                $results[] = [$result['pcn'], $result['cn'], 'http://tieba.baidu.com/f/index/forumpark?cn='.urlencode($result['cn']).'&ci=0&pcn='.urlencode($result['pcn']).'&pci=0&ct=1'];
-            }
-        }
-        return $results;
+        Log::error('[CURL]' . $this->curlError);
+        $this->curlError = '';
+        return false;
     }
 
     public function curlGet($url)
@@ -176,7 +143,7 @@ class AppDebug extends Command
             curl_setopt($h, CURLOPT_MAXCONNECTS, 10);
             curl_setopt($h, CURLOPT_MAXREDIRS, 20);
             curl_setopt($h, CURLOPT_TIMEOUT, 60 * 2);
-            curl_setopt($h, CURLOPT_REFERER, 'http://tieba.baidu.com');
+            curl_setopt($h, CURLOPT_REFERER, 'http://fortune.chinanews.com/');
             curl_setopt($h, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36');
             curl_setopt($h, CURLOPT_HTTPHEADER, ['Content-type: text/html; charset=UTF-8']);
             $this->curl = $h;
