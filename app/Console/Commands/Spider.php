@@ -20,7 +20,7 @@ class Spider extends Command
      *
      * @var string
      */
-    protected $description = '';
+    protected $description = 'FORTUNE SPIDER';
 
     private $curl = null;
     private $curlError = '';
@@ -42,9 +42,7 @@ class Spider extends Command
      */
     public function handle()
     {
-        while (true) {
-            $this->flushOnce();
-        }
+        $this->flushOnce();
     }
 
     public function flushOnce()
@@ -56,36 +54,17 @@ class Spider extends Command
                 break;
             }
             foreach ($data['docs'] as $unit) {
-                $first = DB::table('news')->where('news_key', $unit['id'])->first();
-                if (is_null($first)) {
-                    $contextFile = $this->getText($unit['url']);
-                    if (!empty($this->curlError)) {
-                        Log::error('[CURL]' . $this->curlError);
-                        $this->curlError = '';
-                        continue;
-                    }
-                    $result = DB::transaction(function () use ($unit, $contextFile) {
-                        $id = DB::table('news')->insertGetId([
-                            'news_key' => $unit['id'],
-                            'title' => $unit['title'],
-                            'url' => $unit['url'],
-                            'public' => $unit['pubtime'],
-                            'created_at' => date('Y-m-d H:i:s'),
-                            'updated_at' => date('Y-m-d H:i:s'),
-                        ]);
-                        return DB::table('context')->insert([
-                            'news_id' => $id,
-                            'context' => $contextFile,
-                            'created_at' => date('Y-m-d H:i:s'),
-                            'updated_at' => date('Y-m-d H:i:s'),
-                        ]);
-                    });
-                    if (false == $result) {
-                        Log::error('[SQL]transaction fail');
-                    } else {
-                        $newArtital++;
-                    }
+                $fileName = $this->getFileName($unit);
+                if (file_exists('public/storage/' . $fileName)) {
+                    continue;
                 }
+                $context = $this->getMarkdownText($unit['url']);
+                try {
+                    file_put_contents('public/storage/' . $fileName, $context);
+                } catch (\Exception $e) {
+                    file_put_contents('public/storage/' . hash('sha256', $fileName) . '.md' , $context);
+                }
+                $newArtital++;
             }
             if ($newArtital == 0) {
                 Log::info('NO UPDATE, PAGE: '.$page.'.');
@@ -95,21 +74,61 @@ class Spider extends Command
         }
     }
 
-    public function getText($url)
+    public function getFileName($unit)
+    {
+        if (is_array($unit)) {
+            if (isset($unit['pubtime']) && isset($unit['title'])) {
+                $dateInfo = explode(' ', $unit['pubtime']);
+                if ('UTF-8' != mb_detect_encoding($unit['title'], mb_detect_order(), false)) {
+                    $afterConvert = mb_convert_encoding($unit['title'], 'UTF-8', 'GBK, GB2312, ISO-8859-1, UTF-8');
+                } else {
+                    $afterConvert = $unit['title'];
+                }
+                return $dateInfo[0] . ' ' . $unit['title'] . '.md';
+            }
+        }
+        return false;
+    }
+
+    public function getMarkdownText($url)
     {
         $context = $this->curlGet($url);
         if (empty($context)) {
+            Log::error('[CURL]' . $this->curlError);
+            $this->curlError = '';
             return '';
         }
-        $fileName = hash('sha256', $context);
-        if (!is_dir('public')) {
-            mkdir('public');
+        if ('UTF-8' != mb_detect_encoding($context, mb_detect_order(), false)) {
+            $afterConvert = mb_convert_encoding($context, 'UTF-8', 'GBK, GB2312, ISO-8859-1, UTF-8');
+        } else {
+            $afterConvert = $context;
         }
-        if (!is_dir('public/storage')) {
-            mkdir('public/storage');
+        if (mb_stripos($afterConvert, '<title>')) {
+            $titleStart = mb_substr($afterConvert, mb_stripos($afterConvert, '<title>') + 7, mb_strlen($afterConvert) - mb_stripos($afterConvert, '<title>') - 7);
+            $title = mb_substr($titleStart, 0, mb_stripos($titleStart, '</title>'));
+        } else {
+            $title = 'unknow';
         }
-        file_put_contents('public/storage/' . $fileName . '.html', $context);
-        return $fileName;
+        $m = $afterConvert;
+        $dataset = [];
+        while ($p = mb_stripos($m, '<p>')) {
+            $left = mb_substr($m, 0, $p);
+            $right = mb_substr($m, $p + 3, mb_strlen($m) - $p - 3);
+            $left = trim(str_ireplace(PHP_EOL, '', str_ireplace('</p>', '', $left)));
+            if (mb_substr_count($left, '<') >= 2) {
+                $left = mb_substr($left, 0, mb_strpos($left, '<'));
+            }
+            if (!empty($left)) {
+                $dataset[] = $left;
+            }
+            $m = $right;
+        }
+        unset($dataset[0]);
+        $body = '# ' . $title . PHP_EOL;
+        foreach ($dataset as $p) {
+            $body .= PHP_EOL . $p . PHP_EOL;
+        }
+        return $body;
     }
 
     public function getList(int $pager = 1, int $pagenum = 8)
