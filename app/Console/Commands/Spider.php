@@ -55,14 +55,14 @@ class Spider extends Command
             }
             foreach ($data['docs'] as $unit) {
                 $fileName = $this->getFileName($unit);
-                if (file_exists('public/storage/' . $fileName)) {
+                if (file_exists('markdown/' . $fileName)) {
                     continue;
                 }
                 $context = $this->getMarkdownText($unit['url']);
                 try {
-                    file_put_contents('public/storage/' . $fileName, $context);
+                    file_put_contents('markdown/' . $fileName, $context);
                 } catch (\Exception $e) {
-                    file_put_contents('public/storage/' . hash('sha256', $fileName) . '.md' , $context);
+                    file_put_contents('markdown/' . hash('sha256', $fileName) . '.md' , $context);
                 }
                 $newArtital++;
             }
