@@ -123,6 +123,11 @@ return [
 
     'cipher' => 'AES-256-CBC',
 
+    /* 设置cookie，如果需要的话 */
+    'cookie' => env('SPIDER_COOKIE', ''),
+    'userAgent' => env('SPIDER_UA', ''),
+    'reffer' => env('SPIDER_REFFER', ''),
+
     /*
     |--------------------------------------------------------------------------
     | Autoloaded Service Providers
