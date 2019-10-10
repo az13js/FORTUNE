@@ -43,7 +43,8 @@ class Spider extends Command
      */
     public function handle()
     {
-        $this->flushOnce();
+        
+        //$this->flushOnce();
     }
 
     public function flushOnce()
