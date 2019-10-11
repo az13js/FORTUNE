@@ -110,4 +110,19 @@ class Image
         imagedestroy($gd);
         return true;
     }
+
+    public function empty(int $width, int $height): bool
+    {
+        $this->pixMatrix = [];
+        for ($dy = 0; $dy < $height; $dy++) {
+            if (!isset($this->pixMatrix[$dy])) {
+                $this->pixMatrix[$dy] = [];
+            }
+            for ($dx = 0; $dx < $width; $dx++) {
+                $this->pixMatrix[$dy][$dx] = new Pixel();
+                $this->pixMatrix[$dy][$dx]->setRGBA(mt_rand() % 256, mt_rand() % 256, mt_rand() % 256, 0);
+            }
+        }
+        return true;
+    }
 }

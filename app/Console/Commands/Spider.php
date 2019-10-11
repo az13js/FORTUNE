@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Tools\MultipleUrlContextLoader;
+use App\Image\Image;
 
 class Spider extends Command
 {
@@ -40,6 +41,9 @@ class Spider extends Command
      */
     public function handle()
     {
-        $this->info('!');
+        $this->info('测试开始……');
+        $m = new Image();
+        $m->empty(10, 10);
+        $m->saveAsPng('test.png');
     }
 }
