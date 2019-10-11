@@ -18,4 +18,9 @@ class Pixel
     {
         return $this->rgba;
     }
+
+    public function equal(Pixel $pix): bool
+    {
+        return serialize($this) == serialize($pix);
+    }
 }

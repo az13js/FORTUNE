@@ -3,6 +3,14 @@ namespace App\Image;
 
 class Image
 {
+    /*
+          x------------>
+         y|
+          |
+          |
+          |
+          V
+     */
     private $pixMatrix = [];
 
     public function saveAsPng(string $file, int $rWidth = -1, int $rHeight = -1): bool
@@ -120,9 +128,14 @@ class Image
             }
             for ($dx = 0; $dx < $width; $dx++) {
                 $this->pixMatrix[$dy][$dx] = new Pixel();
-                $this->pixMatrix[$dy][$dx]->setRGBA(mt_rand() % 256, mt_rand() % 256, mt_rand() % 256, 0);
+                $this->pixMatrix[$dy][$dx]->setRGBA(0, 0, 0, 0);
             }
         }
         return true;
+    }
+
+    public function getPixel(int $x, int $y): Pixel
+    {
+        return $this->pixMatrix[$y][$x];
     }
 }

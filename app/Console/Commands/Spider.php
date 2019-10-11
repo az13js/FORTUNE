@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Tools\MultipleUrlContextLoader;
 use App\Image\Image;
+use App\Wfc\Map;
 
 class Spider extends Command
 {
@@ -41,9 +42,20 @@ class Spider extends Command
      */
     public function handle()
     {
-        $this->info('测试开始……');
+        $m = new Map(3, 3);
+        var_dump($m);
+    }
+
+    private function getInputImage(): Image
+    {
         $m = new Image();
-        $m->empty(10, 10);
-        $m->saveAsPng('test.png');
+        $m->empty(3, 3);
+        $m->getPixel(0, 0)->setRGBA(255, 0, 0, 0);
+        $m->getPixel(0, 1)->setRGBA(0, 255, 0, 0);
+        $m->getPixel(0, 2)->setRGBA(0, 0, 255, 0);
+        $m->getPixel(1, 0)->setRGBA(0, 0, 255, 0);
+        $m->getPixel(1, 1)->setRGBA(255, 0, 0, 0);
+        $m->getPixel(1, 2)->setRGBA(0, 255, 0, 0);
+        return $m;
     }
 }
