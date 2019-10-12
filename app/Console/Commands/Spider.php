@@ -43,7 +43,9 @@ class Spider extends Command
     public function handle()
     {
         $m = new Map(3, 3);
-        var_dump($m);
+        foreach ($m->eachPoint() as $point) {
+            var_dump($point);
+        }
     }
 
     private function getInputImage(): Image

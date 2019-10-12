@@ -10,7 +10,7 @@ class Map
     private $firstY = 0;
     private $firstX = 0;
 
-    public function __construct(int $width, int $height, Image $input)
+    public function __construct(int $width, int $height)
     {
         for ($i = 0; $i < $height; $i++) {
             $this->unknowDatas[$i] = [];
@@ -20,5 +20,16 @@ class Map
         }
         $this->firstY = intval($height / 2);
         $this->firstX = intval($width / 2);
+    }
+
+    public function eachPoint(): array
+    {
+        $points = [];
+        foreach ($this->unknowDatas as $row) {
+            foreach ($row as $point) {
+                $points[] = $point;
+            }
+        }
+        return $points;
     }
 }
